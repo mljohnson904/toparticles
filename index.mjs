@@ -1,3 +1,4 @@
+//importing chorme extension from playwright to read webpage
 import { chromium } from 'playwright';
 
 process.on('unhandledRejection', (reason, promise) => {
