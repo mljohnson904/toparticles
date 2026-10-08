@@ -1,0 +1,13 @@
+{
+  "extraKnownMarketplaces": {
+    "claude-code-usage-quota-mod": {
+      "source": {
+        "source": "github",
+        "repo": "anantraghunath/claude-code-usage-quota-mod"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "claude-code-usage-quota@claude-code-usage-quota-mod": true
+  }
+}
