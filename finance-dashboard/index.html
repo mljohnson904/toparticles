@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Personal Finance Dashboard</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --text: #1d2330; --muted: #6b7280;
+    --line: #e3e6eb; --accent: #2f6fed; --good: #1f9d55; --bad: #d64545; --warn: #d69e2e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #12151c; --card: #1b2029; --text: #e7eaf0; --muted: #9aa3b2;
+      --line: #2a303c; --accent: #6c9cff; --good: #3cc37a; --bad: #ff6b6b; --warn: #f0b64a;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #12151c; --card: #1b2029; --text: #e7eaf0; --muted: #9aa3b2;
+    --line: #2a303c; --accent: #6c9cff; --good: #3cc37a; --bad: #ff6b6b; --warn: #f0b64a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  header {
+    display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;
+    padding: 16px; max-width: 1100px; margin: 0 auto;
+  }
+  h1 { font-size: 1.35rem; margin: 0; }
+  h2 { font-size: 1rem; margin: 0 0 12px; }
+  main { max-width: 1100px; margin: 0 auto; padding: 0 16px 40px; display: grid; gap: 16px; }
+  .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  .stat .label { color: var(--muted); font-size: .85rem; }
+  .stat .value { font-size: 1.6rem; font-weight: 650; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .good { color: var(--good); } .bad { color: var(--bad); } .warn { color: var(--warn); }
+  .muted { color: var(--muted); font-size: .85rem; }
+  form { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); align-items: end; }
+  label { display: grid; gap: 4px; font-size: .8rem; color: var(--muted); }
+  input, select, button {
+    font: inherit; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line);
+    background: var(--bg); color: var(--text); width: 100%;
+  }
+  button {
+    background: var(--accent); color: #fff; border: none; cursor: pointer; font-weight: 600;
+  }
+  button.secondary { background: transparent; color: var(--text); border: 1px solid var(--line); width: auto; }
+  button.danger { background: transparent; color: var(--bad); border: 1px solid var(--line); width: auto; padding: 4px 8px; font-size: .8rem; }
+  table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; font-size: .8rem; text-transform: uppercase; letter-spacing: .03em; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .bar-row { display: grid; grid-template-columns: 110px 1fr 90px; gap: 10px; align-items: center; margin: 8px 0; font-size: .9rem; }
+  .bar { height: 10px; background: var(--line); border-radius: 99px; overflow: hidden; }
+  .bar > span { display: block; height: 100%; background: var(--accent); border-radius: 99px; }
+  .bar > span.over { background: var(--bad); }
+  .scroll { overflow-x: auto; }
+  .row-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: .75rem; border: 1px solid var(--line); color: var(--muted); }
+  .tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+  .tabs button { width: auto; }
+  .tabs button.active { background: var(--accent); color: #fff; }
+  .hidden { display: none !important; }
+  .empty { color: var(--muted); padding: 12px 0; }
+  @media (max-width: 520px) {
+    .bar-row { grid-template-columns: 90px 1fr 70px; }
+    main { padding: 0 12px 32px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Personal Finance Dashboard</h1>
+    <div class="muted">Everything is saved in this browser only. Use Export to back up.</div>
+  </div>
+  <div class="row-actions">
+    <select id="monthPicker" aria-label="Month" style="width:auto"></select>
+    <button class="secondary" id="exportBtn">Export</button>
+    <button class="secondary" id="importBtn">Import</button>
+    <button class="secondary" id="sampleBtn">Load sample data</button>
+    <button class="secondary" id="clearBtn">Clear all</button>
+    <input type="file" id="importFile" accept="application/json" class="hidden">
+  </div>
+</header>
+
+<main>
+  <section class="grid" id="stats"></section>
+
+  <section class="grid" style="grid-template-columns: 1fr 1fr;">
+    <div class="card">
+      <h2>Add a transaction</h2>
+      <form id="txForm">
+        <label>Type
+          <select name="type" id="txType">
+            <option value="expense">Expense</option>
+            <option value="income">Income</option>
+          </select>
+        </label>
+        <label>Date <input type="date" name="date" required></label>
+        <label>Amount ($) <input type="number" name="amount" step="0.01" min="0" required></label>
+        <label>Category
+          <select name="category" id="txCategory"></select>
+        </label>
+        <label>Description <input type="text" name="description" maxlength="80"></label>
+        <button type="submit">Add</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Monthly budget</h2>
+      <form id="budgetForm">
+        <label>Category
+          <select name="category" id="budgetCategory"></select>
+        </label>
+        <label>Monthly limit ($) <input type="number" name="limit" step="0.01" min="0" required></label>
+        <button type="submit">Set limit</button>
+      </form>
+      <div class="muted" style="margin-top:8px">Set a limit to a category, then see how much you have used this month.</div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Budget vs. spending</h2>
+    <div id="budgetBars"></div>
+  </section>
+
+  <section class="grid" style="grid-template-columns: 1fr 1fr;">
+    <div class="card">
+      <h2>Spending by category</h2>
+      <div id="categoryBars"></div>
+    </div>
+    <div class="card">
+      <h2>Net cash flow, last 6 months</h2>
+      <svg id="trendChart" viewBox="0 0 400 200" width="100%" role="img" aria-label="Income and expenses by month"></svg>
+      <div class="muted">Blue = income, red = expenses. Net = income minus expenses.</div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Savings goal</h2>
+    <form id="goalForm">
+      <label>Goal name <input type="text" name="name" maxlength="40" required></label>
+      <label>Target ($) <input type="number" name="target" step="0.01" min="1" required></label>
+      <label>Saved so far ($) <input type="number" name="saved" step="0.01" min="0" value="0" required></label>
+      <button type="submit">Save goal</button>
+    </form>
+    <div id="goalDisplay" style="margin-top:12px"></div>
+  </section>
+
+  <section class="card">
+    <div class="row-actions" style="justify-content:space-between">
+      <h2 style="margin:0">Transactions this month</h2>
+      <div class="tabs" id="filterTabs">
+        <button class="secondary active" data-filter="all">All</button>
+        <button class="secondary" data-filter="income">Income</button>
+        <button class="secondary" data-filter="expense">Expenses</button>
+      </div>
+    </div>
+    <div class="scroll" style="margin-top:12px">
+      <table>
+        <thead>
+          <tr><th>Date</th><th>Description</th><th>Category</th><th class="num">Amount</th><th></th></tr>
+        </thead>
+        <tbody id="txBody"></tbody>
+      </table>
+      <div class="empty hidden" id="txEmpty">No transactions for this month yet.</div>
+    </div>
+  </section>
+</main>
+
+<script>
+(() => {
+  "use strict";
+
+  const STORAGE_KEY = "pfDashboard.v1";
+  const CATEGORIES = ["Housing", "Food", "Transportation", "Utilities", "Insurance",
+    "Entertainment", "Clothing", "Healthcare", "Debt Payments", "Savings", "Other"];
+
+  const money = n => (n < 0 ? "-" : "") + "$" + Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const monthKey = d => d.slice(0, 7);
+  const todayISO = () => new Date().toISOString().slice(0, 10);
+
+  // ---------- storage (wrapped: may be blocked in private windows) ----------
+  let state = { transactions: [], budgets: {}, goal: null };
+  function load() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) state = Object.assign(state, JSON.parse(raw));
+    } catch (e) { /* storage unavailable; keep in-memory state */ }
+  }
+  function save() {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
+  }
+
+  // ---------- helpers ----------
+  const $ = id => document.getElementById(id);
+  const sum = arr => arr.reduce((a, t) => a + t.amount, 0);
+  const monthTx = m => state.transactions.filter(t => monthKey(t.date) === m);
+
+  function allMonths() {
+    const set = new Set(state.transactions.map(t => monthKey(t.date)));
+    set.add(monthKey(todayISO()));
+    return [...set].sort().reverse();
+  }
+
+  // ---------- rendering ----------
+  function fillCategorySelects() {
+    const opts = CATEGORIES.map(c => `<option>${esc(c)}</option>`).join("");
+    $("txCategory").innerHTML = opts;
+    $("budgetCategory").innerHTML = opts;
+  }
+
+  function fillMonthPicker(current) {
+    const months = allMonths();
+    $("monthPicker").innerHTML = months.map(m => {
+      const label = new Date(m + "-01T00:00:00").toLocaleString(undefined, { month: "long", year: "numeric" });
+      return `<option value="${m}" ${m === current ? "selected" : ""}>${label}</option>`;
+    }).join("");
+  }
+
+  function renderStats(m) {
+    const tx = monthTx(m);
+    const income = sum(tx.filter(t => t.type === "income"));
+    const expenses = sum(tx.filter(t => t.type === "expense"));
+    const net = income - expenses;
+    const rate = income > 0 ? (net / income) * 100 : null;
+    const cards = [
+      { label: "Income", value: money(income), cls: "good" },
+      { label: "Expenses", value: money(expenses), cls: "bad" },
+      { label: "Net this month", value: money(net), cls: net >= 0 ? "good" : "bad" },
+      { label: "Savings rate", value: rate === null ? "—" : rate.toFixed(1) + "%", cls: rate !== null && rate >= 20 ? "good" : "warn",
+        note: "Aim for 20% or more of income." }
+    ];
+    $("stats").innerHTML = cards.map(c => `
+      <div class="card stat">
+        <div class="label">${c.label}</div>
+        <div class="value ${c.cls}">${c.value}</div>
+        ${c.note ? `<div class="muted">${c.note}</div>` : ""}
+      </div>`).join("");
+  }
+
+  function barRow(label, spent, limit) {
+    const pct = limit ? Math.min((spent / limit) * 100, 100) : 0;
+    const over = limit && spent > limit;
+    const sub = limit ? `${money(spent)} / ${money(limit)}` : money(spent);
+    return `<div class="bar-row">
+      <div>${esc(label)}</div>
+      <div class="bar"><span class="${over ? "over" : ""}" style="width:${limit ? pct : 0}%"></span></div>
+      <div class="num ${over ? "bad" : ""}" style="text-align:right">${sub}</div>
+    </div>`;
+  }
+
+  function renderBudgets(m) {
+    const exp = monthTx(m).filter(t => t.type === "expense");
+    const byCat = {};
+    exp.forEach(t => byCat[t.category] = (byCat[t.category] || 0) + t.amount);
+    const cats = Object.keys(state.budgets);
+    if (!cats.length) {
+      $("budgetBars").innerHTML = `<div class="empty">No budgets set yet. Add a monthly limit above.</div>`;
+      return;
+    }
+    $("budgetBars").innerHTML = cats.map(c => barRow(c, byCat[c] || 0, state.budgets[c])).join("");
+  }
+
+  function renderCategories(m) {
+    const exp = monthTx(m).filter(t => t.type === "expense");
+    const byCat = {};
+    exp.forEach(t => byCat[t.category] = (byCat[t.category] || 0) + t.amount);
+    const entries = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
+    if (!entries.length) {
+      $("categoryBars").innerHTML = `<div class="empty">No expenses logged this month.</div>`;
+      return;
+    }
+    const total = entries.reduce((a, [, v]) => a + v, 0);
+    $("categoryBars").innerHTML = entries.map(([c, v]) => {
+      const share = (v / total) * 100;
+      return `<div class="bar-row">
+        <div>${esc(c)}</div>
+        <div class="bar"><span style="width:${share}%"></span></div>
+        <div style="text-align:right">${share.toFixed(0)}%</div>
+      </div>`;
+    }).join("") + `<div class="muted" style="margin-top:8px">Total: ${money(total)}</div>`;
+  }
+
+  function renderTrend(m) {
+    // Last six months ending with the selected month
+    const [y, mo] = m.split("-").map(Number);
+    const months = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(y, mo - 1 - i, 1);
+      months.push(d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"));
+    }
+    const data = months.map(k => {
+      const tx = monthTx(k);
+      return { k, inc: sum(tx.filter(t => t.type === "income")), exp: sum(tx.filter(t => t.type === "expense")) };
+    });
+    const max = Math.max(1, ...data.map(d => Math.max(d.inc, d.exp)));
+    const W = 400, H = 200, pad = 28, groupW = (W - pad) / data.length;
+    const yFor = v => H - 22 - (v / max) * (H - 40);
+    let svg = `<line x1="${pad}" y1="${H - 22}" x2="${W}" y2="${H - 22}" stroke="var(--line)"/>`;
+    data.forEach((d, i) => {
+      const x = pad + i * groupW + groupW * 0.15, bw = groupW * 0.3;
+      svg += `<rect x="${x}" y="${yFor(d.inc)}" width="${bw}" height="${H - 22 - yFor(d.inc)}" fill="var(--accent)" rx="3"><title>Income ${money(d.inc)}</title></rect>`;
+      svg += `<rect x="${x + bw + 4}" y="${yFor(d.exp)}" width="${bw}" height="${H - 22 - yFor(d.exp)}" fill="var(--bad)" rx="3"><title>Expenses ${money(d.exp)}</title></rect>`;
+      const label = new Date(d.k + "-01T00:00:00").toLocaleString(undefined, { month: "short" });
+      svg += `<text x="${x + bw}" y="${H - 6}" font-size="11" text-anchor="middle" fill="var(--muted)">${label}</text>`;
+    });
+    svg += `<text x="0" y="12" font-size="10" fill="var(--muted)">${money(max)}</text>`;
+    $("trendChart").innerHTML = svg;
+  }
+
+  function renderGoal() {
+    const g = state.goal;
+    if (!g) { $("goalDisplay").innerHTML = `<div class="empty">No savings goal yet.</div>`; return; }
+    const pct = Math.min((g.saved / g.target) * 100, 100);
+    const left = Math.max(g.target - g.saved, 0);
+    $("goalDisplay").innerHTML = `
+      <div><strong>${esc(g.name)}</strong> — ${money(g.saved)} of ${money(g.target)} (${pct.toFixed(0)}%)</div>
+      <div class="bar" style="margin:8px 0"><span style="width:${pct}%"></span></div>
+      <div class="muted">${left > 0 ? money(left) + " to go." : "Goal reached!"}</div>
+      <button class="danger" id="goalDelete" style="margin-top:8px">Remove goal</button>`;
+    $("goalDelete").onclick = () => { state.goal = null; save(); renderAll(); };
+  }
+
+  let filter = "all";
+  function renderTransactions(m) {
+    let tx = monthTx(m);
+    if (filter !== "all") tx = tx.filter(t => t.type === filter);
+    tx.sort((a, b) => b.date.localeCompare(a.date));
+    $("txEmpty").classList.toggle("hidden", tx.length > 0);
+    $("txBody").innerHTML = tx.map(t => `
+      <tr>
+        <td>${esc(t.date)}</td>
+        <td>${esc(t.description || "")}</td>
+        <td><span class="pill">${esc(t.category)}</span></td>
+        <td class="num ${t.type === "income" ? "good" : ""}">${t.type === "income" ? "+" : "-"}${money(t.amount)}</td>
+        <td><button class="danger" data-id="${t.id}">Delete</button></td>
+      </tr>`).join("");
+  }
+
+  let currentMonth = monthKey(todayISO());
+  function renderAll() {
+    fillMonthPicker(currentMonth);
+    renderStats(currentMonth);
+    renderBudgets(currentMonth);
+    renderCategories(currentMonth);
+    renderTrend(currentMonth);
+    renderGoal();
+    renderTransactions(currentMonth);
+  }
+
+  // ---------- events ----------
+  $("txForm").addEventListener("submit", e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const amount = Number(f.get("amount"));
+    if (!(amount > 0)) return;
+    state.transactions.push({
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      type: f.get("type"), date: f.get("date"), amount,
+      category: f.get("category"), description: (f.get("description") || "").trim()
+    });
+    currentMonth = monthKey(f.get("date"));
+    save(); e.target.reset(); $("txType").value = "expense"; e.target.date.value = todayISO();
+    renderAll();
+  });
+
+  $("budgetForm").addEventListener("submit", e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    state.budgets[f.get("category")] = Number(f.get("limit"));
+    save(); e.target.reset(); renderAll();
+  });
+
+  $("goalForm").addEventListener("submit", e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    state.goal = { name: f.get("name").trim(), target: Number(f.get("target")), saved: Number(f.get("saved")) };
+    save(); e.target.reset(); renderAll();
+  });
+
+  $("txBody").addEventListener("click", e => {
+    const id = e.target.dataset && e.target.dataset.id;
+    if (!id) return;
+    state.transactions = state.transactions.filter(t => t.id !== id);
+    save(); renderAll();
+  });
+
+  $("monthPicker").addEventListener("change", e => { currentMonth = e.target.value; renderAll(); });
+
+  document.querySelectorAll("#filterTabs button").forEach(btn => btn.addEventListener("click", () => {
+    filter = btn.dataset.filter;
+    document.querySelectorAll("#filterTabs button").forEach(b => b.classList.toggle("active", b === btn));
+    renderTransactions(currentMonth);
+  }));
+
+  $("exportBtn").addEventListener("click", () => {
+    const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "finance-backup-" + todayISO() + ".json";
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
+
+  $("importBtn").addEventListener("click", () => $("importFile").click());
+  $("importFile").addEventListener("change", async e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const data = JSON.parse(await file.text());
+      if (!Array.isArray(data.transactions)) throw new Error("Not a finance backup file.");
+      state = { transactions: data.transactions, budgets: data.budgets || {}, goal: data.goal || null };
+      save(); renderAll();
+    } catch (err) { alert("Could not import: " + err.message); }
+    e.target.value = "";
+  });
+
+  $("sampleBtn").addEventListener("click", () => {
+    if (state.transactions.length && !confirm("Replace your current data with sample data?")) return;
+    const now = new Date();
+    const mk = (offset, day) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - offset, day);
+      return d.toISOString().slice(0, 10);
+    };
+    const sample = [];
+    for (let o = 0; o < 6; o++) {
+      sample.push({ id: "s" + o + "a", type: "income", date: mk(o, 1), amount: 3200, category: "Other", description: "Paycheck" });
+      sample.push({ id: "s" + o + "b", type: "expense", date: mk(o, 3), amount: 1100, category: "Housing", description: "Rent" });
+      sample.push({ id: "s" + o + "c", type: "expense", date: mk(o, 6), amount: 240 + o * 15, category: "Food", description: "Groceries" });
+      sample.push({ id: "s" + o + "d", type: "expense", date: mk(o, 10), amount: 95, category: "Utilities", description: "Electric & internet" });
+      sample.push({ id: "s" + o + "e", type: "expense", date: mk(o, 14), amount: 130, category: "Transportation", description: "Gas & transit" });
+      sample.push({ id: "s" + o + "f", type: "expense", date: mk(o, 20), amount: 60 + o * 12, category: "Entertainment", description: "Dining out" });
+    }
+    state = {
+      transactions: sample,
+      budgets: { Food: 400, Entertainment: 100, Transportation: 180, Utilities: 120 },
+      goal: { name: "Emergency fund", target: 5000, saved: 1850 }
+    };
+    save(); currentMonth = monthKey(todayISO()); renderAll();
+  });
+
+  $("clearBtn").addEventListener("click", () => {
+    if (!confirm("Delete ALL saved data in this browser? Export first if you want a backup.")) return;
+    state = { transactions: [], budgets: {}, goal: null };
+    save(); renderAll();
+  });
+
+  // ---------- init ----------
+  fillCategorySelects();
+  document.querySelector('#txForm input[name="date"]').value = todayISO();
+  load();
+  renderAll();
+})();
+</script>
+</body>
+</html>
